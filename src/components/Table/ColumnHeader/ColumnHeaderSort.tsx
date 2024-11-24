@@ -1,4 +1,5 @@
-import { useAtom } from "jotai";
+import { memo } from "react";
+import { useSetAtom } from "jotai";
 import { colord } from "colord";
 
 import { Tooltip, IconButton } from "@mui/material";
@@ -8,49 +9,56 @@ import IconSlash, {
 } from "@src/components/IconSlash";
 
 import { tableScope, tableSortsAtom } from "@src/atoms/tableScope";
-import { FieldType } from "@src/constants/fields";
-import { getFieldProp } from "@src/components/fields";
+import useSaveTableSorts from "./useSaveTableSorts";
 
-import { ColumnConfig } from "@src/types/table";
-
-const SORT_STATES = ["none", "desc", "asc"] as const;
+export const SORT_STATES = ["none", "desc", "asc"] as const;
 
 export interface IColumnHeaderSortProps {
-  column: ColumnConfig;
+  sortKey: string;
+  currentSort: typeof SORT_STATES[number];
+  tabIndex?: number;
+  canEditColumns: boolean;
 }
 
-export default function ColumnHeaderSort({ column }: IColumnHeaderSortProps) {
-  const [tableSorts, setTableSorts] = useAtom(tableSortsAtom, tableScope);
+/**
+ * Renders button with current sort state.
+ * On click, updates `tableSortsAtom` in `tableScope`.
+ */
+export const ColumnHeaderSort = memo(function ColumnHeaderSort({
+  sortKey,
+  currentSort,
+  tabIndex,
+  canEditColumns,
+}: IColumnHeaderSortProps) {
+  const setTableSorts = useSetAtom(tableSortsAtom, tableScope);
 
-  const _sortKey = getFieldProp("sortKey", (column as any).type);
-  const sortKey = _sortKey ? `${column.key}.${_sortKey}` : column.key;
-
-  const currentSort: typeof SORT_STATES[number] =
-    tableSorts[0]?.key !== sortKey
-      ? "none"
-      : tableSorts[0]?.direction || "none";
   const nextSort =
     SORT_STATES[SORT_STATES.indexOf(currentSort) + 1] ?? SORT_STATES[0];
 
-  const handleSortClick = () => {
-    if (nextSort === "none") setTableSorts([]);
-    else setTableSorts([{ key: sortKey, direction: nextSort }]);
-  };
+  const triggerSaveTableSorts = useSaveTableSorts(canEditColumns);
 
-  if (column.type === FieldType.id) return null;
+  const handleSortClick = () => {
+    setTableSorts(
+      nextSort === "none" ? [] : [{ key: sortKey, direction: nextSort }]
+    );
+    triggerSaveTableSorts(
+      nextSort === "none" ? [] : [{ key: sortKey, direction: nextSort }]
+    );
+  };
 
   return (
     <Tooltip
-      title={nextSort === "none" ? "Unsort" : `Sort by ${nextSort}ending`}
+      title={nextSort === "none" ? "Remove sort" : `Sort by ${nextSort}ending`}
     >
       <IconButton
         disableFocusRipple={true}
         size="small"
         onClick={handleSortClick}
         color="inherit"
+        tabIndex={tabIndex}
         sx={{
           bgcolor: "background.default",
-          "&:hover": {
+          "&:hover, &:focus": {
             backgroundColor: (theme) =>
               colord(theme.palette.background.default)
                 .mix(
@@ -74,12 +82,6 @@ export default function ColumnHeaderSort({ column }: IColumnHeaderSortProps) {
 
           position: "relative",
           opacity: currentSort !== "none" ? 1 : 0,
-          ".column-header:hover &": { opacity: 1 },
-
-          transition: (theme) =>
-            theme.transitions.create(["background-color", "opacity"], {
-              duration: theme.transitions.duration.short,
-            }),
 
           "& .arrow": {
             transition: (theme) =>
@@ -89,7 +91,7 @@ export default function ColumnHeaderSort({ column }: IColumnHeaderSortProps) {
 
             transform: currentSort === "asc" ? "rotate(180deg)" : "none",
           },
-          "&:hover .arrow": {
+          "&:hover .arrow, &:focus .arrow": {
             transform:
               currentSort === "asc" || nextSort === "asc"
                 ? "rotate(180deg)"
@@ -100,7 +102,7 @@ export default function ColumnHeaderSort({ column }: IColumnHeaderSortProps) {
             strokeDashoffset:
               currentSort === "none" ? 0 : ICON_SLASH_STROKE_DASHOFFSET,
           },
-          "&:hover .icon-slash": {
+          "&:hover .icon-slash, &:focus .icon-slash": {
             strokeDashoffset:
               nextSort === "none" ? 0 : ICON_SLASH_STROKE_DASHOFFSET,
           },
@@ -113,4 +115,6 @@ export default function ColumnHeaderSort({ column }: IColumnHeaderSortProps) {
       </IconButton>
     </Tooltip>
   );
-}
+});
+
+export default ColumnHeaderSort;

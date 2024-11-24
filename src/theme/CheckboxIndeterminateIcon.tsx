@@ -47,7 +47,7 @@ export default function CheckboxIndeterminateIcon() {
           boxShadow: 1,
         },
 
-        ".Mui-checked &, [aria-selected='true'] &": {
+        ".MuiCheckbox-indeterminate &, [aria-selected='true'] &": {
           backgroundColor: "currentColor",
           borderColor: "currentColor",
 
@@ -68,6 +68,7 @@ export default function CheckboxIndeterminateIcon() {
           },
         },
       }}
+      className="checkbox-indeterminate-icon"
     >
       <svg viewBox="0 0 18 18">
         <line

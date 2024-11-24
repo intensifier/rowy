@@ -92,20 +92,32 @@ export default function SteppedAccordion({
               }
               {...labelButtonProps}
             >
-              <StepLabel error={error} {...labelProps}>
+              <StepLabel
+                error={error}
+                {...labelProps}
+                StepIconProps={{
+                  sx: {
+                    "&.Mui-active": {
+                      transform: "rotate(0deg) !important",
+                    },
+                  },
+                }}
+              >
                 {title}
-                <ExpandIcon sx={{ mr: -0.5 }} />
+                {content && <ExpandIcon sx={{ mr: -0.5 }} />}
               </StepLabel>
             </StepButton>
 
-            <StepContent
-              TransitionProps={
-                disableUnmount ? { unmountOnExit: false } : undefined
-              }
-              {...contentProps}
-            >
-              {content}
-            </StepContent>
+            {content && (
+              <StepContent
+                TransitionProps={
+                  disableUnmount ? { unmountOnExit: false } : undefined
+                }
+                {...contentProps}
+              >
+                {content}
+              </StepContent>
+            )}
           </Step>
         )
       )}

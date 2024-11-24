@@ -1,5 +1,6 @@
 import { useAtom, useSetAtom } from "jotai";
-import { find, groupBy } from "lodash-es";
+import { find, groupBy, sortBy } from "lodash-es";
+import { Link } from "react-router-dom";
 
 import {
   Container,
@@ -13,12 +14,14 @@ import {
   IconButton,
   Zoom,
 } from "@mui/material";
+
 import ViewListIcon from "@mui/icons-material/ViewListOutlined";
 import ViewGridIcon from "@mui/icons-material/ViewModuleOutlined";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import AddIcon from "@mui/icons-material/Add";
+import InfoIcon from "@mui/icons-material/InfoOutlined";
 
 import FloatingSearch from "@src/components/FloatingSearch";
 import SlideTransition from "@src/components/Modal/SlideTransition";
@@ -28,31 +31,33 @@ import HomeWelcomePrompt from "@src/components/Tables/HomeWelcomePrompt";
 import EmptyState from "@src/components/EmptyState";
 
 import {
-  globalScope,
+  projectScope,
   userRolesAtom,
   userSettingsAtom,
   updateUserSettingsAtom,
   tablesAtom,
   tablesViewAtom,
   tableSettingsDialogAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { TableSettings } from "@src/types/table";
 import { ROUTES } from "@src/constants/routes";
 import useBasicSearch from "@src/hooks/useBasicSearch";
-import { APP_BAR_HEIGHT } from "@src/layouts/Navigation";
+import { TOP_BAR_HEIGHT } from "@src/layouts/Navigation/TopBar";
+import { useScrollToHash } from "@src/hooks/useScrollToHash";
 
 const SEARCH_KEYS = ["id", "name", "section", "description"];
 
-export default function HomePage() {
-  const [userRoles] = useAtom(userRolesAtom, globalScope);
-  const [userSettings] = useAtom(userSettingsAtom, globalScope);
-  const [updateUserSettings] = useAtom(updateUserSettingsAtom, globalScope);
-  const [tables] = useAtom(tablesAtom, globalScope);
-  const [view, setView] = useAtom(tablesViewAtom, globalScope);
+export default function TablesPage() {
+  const [userRoles] = useAtom(userRolesAtom, projectScope);
+  const [userSettings] = useAtom(userSettingsAtom, projectScope);
+  const [updateUserSettings] = useAtom(updateUserSettingsAtom, projectScope);
+  const [tables] = useAtom(tablesAtom, projectScope);
+  const [view, setView] = useAtom(tablesViewAtom, projectScope);
   const openTableSettingsDialog = useSetAtom(
     tableSettingsDialogAtom,
-    globalScope
+    projectScope
   );
+  useScrollToHash();
 
   const [results, query, handleQuery] = useBasicSearch(
     tables ?? [],
@@ -64,7 +69,7 @@ export default function HomePage() {
     : [];
   const sections: Record<string, TableSettings[]> = {
     Favorites: favorites.map((id) => find(results, { id })) as TableSettings[],
-    ...groupBy(results, "section"),
+    ...groupBy(sortBy(results, ["section", "name"]), "section"),
   };
 
   if (!Array.isArray(tables))
@@ -112,7 +117,7 @@ export default function HomePage() {
         message="No tables"
         description="There are no tables in this project. Sign in with an ADMIN account to create tables."
         fullScreen
-        style={{ marginTop: -APP_BAR_HEIGHT }}
+        style={{ marginTop: -TOP_BAR_HEIGHT }}
       />
     );
   }
@@ -132,30 +137,45 @@ export default function HomePage() {
   const getActions = (table: TableSettings) => (
     <>
       {userRoles.includes("ADMIN") && (
-        <IconButton
-          aria-label="Edit table"
-          onClick={() =>
-            openTableSettingsDialog({ mode: "update", data: table })
-          }
-          size={view === "list" ? "large" : undefined}
-        >
-          <EditIcon />
-        </IconButton>
+        <Tooltip title="Edit Table">
+          <IconButton
+            aria-label="Edit table"
+            onClick={() =>
+              openTableSettingsDialog({ mode: "update", data: table })
+            }
+            size={view === "list" ? "large" : undefined}
+          >
+            <EditIcon />
+          </IconButton>
+        </Tooltip>
       )}
-      <Checkbox
-        onChange={handleFavorite(table.id)}
-        checked={favorites.includes(table.id)}
-        icon={<FavoriteBorderIcon />}
-        checkedIcon={
-          <Zoom in>
-            <FavoriteIcon />
-          </Zoom>
-        }
-        name={`favorite-${table.id}`}
-        inputProps={{ "aria-label": "Favorite" }}
-        sx={view === "list" ? { p: 1.5 } : undefined}
-        color="secondary"
-      />
+      <Tooltip title="Favorite">
+        <Checkbox
+          onChange={handleFavorite(table.id)}
+          checked={favorites.includes(table.id)}
+          icon={<FavoriteBorderIcon />}
+          checkedIcon={
+            <Zoom in>
+              <FavoriteIcon />
+            </Zoom>
+          }
+          name={`favorite-${table.id}`}
+          inputProps={{ "aria-label": "Favorite" }}
+          sx={view === "list" ? { p: 1.5 } : undefined}
+          color="secondary"
+        />
+      </Tooltip>
+      <Tooltip title="Table information">
+        <IconButton
+          aria-label="Table information"
+          size={view === "list" ? "large" : undefined}
+          component={Link}
+          to={`${getLink(table)}#sideDrawer="table-information"`}
+          style={{ marginLeft: 0 }}
+        >
+          <InfoIcon />
+        </IconButton>
+      </Tooltip>
     </>
   );
 
@@ -165,7 +185,10 @@ export default function HomePage() {
         label="Search tables"
         onChange={(e) => handleQuery(e.target.value)}
         paperSx={{
-          maxWidth: (theme) => ({ md: theme.breakpoints.values.sm - 48 }),
+          maxWidth: (theme) => ({
+            md: theme.breakpoints.values.sm - 48 * 4,
+            lg: theme.breakpoints.values.sm - 48,
+          }),
           mb: { xs: 2, md: -6 },
         }}
       />

@@ -1,14 +1,12 @@
 import { lazy } from "react";
 import { IFieldConfig, FieldType } from "@src/components/fields/types";
-import withHeavyCell from "@src/components/fields/_withTableCell/withHeavyCell";
+import withRenderTableCell from "@src/components/Table/TableCell/withRenderTableCell";
 
 import { UpdatedBy as UpdatedByIcon } from "@src/assets/icons";
-import BasicCell from "@src/components/fields/_BasicCell/BasicCellNull";
-import withSideDrawerEditor from "@src/components/Table/editors/withSideDrawerEditor";
+import DisplayCell from "./DisplayCell";
 
-const TableCell = lazy(
-  () => import("./TableCell" /* webpackChunkName: "TableCell-UpdatedBy" */)
-);
+import BasicContextMenuActions from "@src/components/Table/ContextMenu/BasicCellContextMenuActions";
+
 const SideDrawerField = lazy(
   () =>
     import(
@@ -30,9 +28,11 @@ export const config: IFieldConfig = {
   icon: <UpdatedByIcon />,
   description:
     "Displays the user that last updated the row, timestamp, and updated field key. Read-only.",
-  TableCell: withHeavyCell(BasicCell, TableCell),
-  TableEditor: withSideDrawerEditor(TableCell),
+  TableCell: withRenderTableCell(DisplayCell, null),
   SideDrawerField,
   settings: Settings,
+  requireCollectionTable: true,
+  contextMenuActions: BasicContextMenuActions,
+  keywords: ["date", "time"]
 };
 export default config;

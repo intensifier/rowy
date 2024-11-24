@@ -2,15 +2,16 @@ import { useLocation } from "react-router-dom";
 
 import { ROUTES } from "@src/constants/routes";
 import { ColumnConfig, TableRow, TableRowRef } from "@src/types/table";
+import get from "lodash-es/get";
 
 export const useSubTableData = (
   column: ColumnConfig,
   row: TableRow,
-  docRef: TableRowRef
+  _rowy_ref: TableRowRef
 ) => {
   const label = (column.config?.parentLabel ?? []).reduce((acc, curr) => {
-    if (acc !== "") return `${acc} - ${row[curr]}`;
-    else return row[curr];
+    if (acc !== "") return `${acc} - ${get(row, curr)}`;
+    else return get(row, curr);
   }, "");
 
   const documentCount: string = row[column.fieldName]?.count ?? "";
@@ -20,17 +21,14 @@ export const useSubTableData = (
     location.pathname.split("/" + ROUTES.subTable)[0]
   );
 
-  // const [searchParams] = useSearchParams();
-  // const parentLabels = searchParams.get("parentLabel");
+  // Get params from URL: /table/:tableId/subTable/:docPath/:subTableKey
   let subTablePath = [
     rootTablePath,
     ROUTES.subTable,
-    encodeURIComponent(docRef.path),
+    encodeURIComponent(_rowy_ref.path),
     column.key,
   ].join("/");
 
-  // if (parentLabels) subTablePath += `${parentLabels ?? ""},${label ?? ""}`;
-  // else
   subTablePath += "?parentLabel=" + encodeURIComponent(label ?? "");
 
   return { documentCount, label, subTablePath };

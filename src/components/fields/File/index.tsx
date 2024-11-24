@@ -1,13 +1,13 @@
 import { lazy } from "react";
 import { IFieldConfig, FieldType } from "@src/components/fields/types";
-import withHeavyCell from "@src/components/fields/_withTableCell/withHeavyCell";
+import withRenderTableCell from "@src/components/Table/TableCell/withRenderTableCell";
 
 import FileIcon from "@mui/icons-material/AttachFile";
-import BasicCell from "@src/components/fields/_BasicCell/BasicCellNull";
-import NullEditor from "@src/components/Table/editors/NullEditor";
+import DisplayCell from "./DisplayCell";
+import ContextMenuActions from "./ContextMenuActions";
 
-const TableCell = lazy(
-  () => import("./TableCell" /* webpackChunkName: "TableCell-File" */)
+const EditorCell = lazy(
+  () => import("./EditorCell" /* webpackChunkName: "EditorCell-File" */)
 );
 const SideDrawerField = lazy(
   () =>
@@ -23,9 +23,11 @@ export const config: IFieldConfig = {
   initialValue: [],
   icon: <FileIcon />,
   description: "File uploaded to Firebase Storage. Supports any file type.",
-  TableCell: withHeavyCell(BasicCell, TableCell),
-  TableEditor: NullEditor as any,
+  TableCell: withRenderTableCell(DisplayCell, EditorCell, "inline", {
+    disablePadding: true,
+  }),
   SideDrawerField,
+  contextMenuActions: ContextMenuActions,
 };
 export default config;
 

@@ -9,10 +9,10 @@ import MemoizedField from "./MemoizedField";
 import SaveState from "./SaveState";
 
 import {
-  globalScope,
+  projectScope,
   userRolesAtom,
   userSettingsAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import {
   tableScope,
   tableIdAtom,
@@ -30,8 +30,8 @@ export interface ISideDrawerFieldsProps {
 }
 
 export default function SideDrawerFields({ row }: ISideDrawerFieldsProps) {
-  const [userRoles] = useAtom(userRolesAtom, globalScope);
-  const [userSettings] = useAtom(userSettingsAtom, globalScope);
+  const [userRoles] = useAtom(userRolesAtom, projectScope);
+  const [userSettings] = useAtom(userSettingsAtom, projectScope);
   const [tableId] = useAtom(tableIdAtom, tableScope);
   const [tableSettings] = useAtom(tableSettingsAtom, tableScope);
   const [tableColumnsOrdered] = useAtom(tableColumnsOrderedAtom, tableScope);
@@ -66,7 +66,16 @@ export default function SideDrawerFields({ row }: ISideDrawerFieldsProps) {
 
       setSaveState("saving");
       try {
-        await updateField({ path: selectedCell!.path, fieldName, value });
+        await updateField({
+          path: selectedCell!.path,
+          fieldName,
+          value,
+          deleteField: undefined,
+          arrayTableData: {
+            index: selectedCell.arrayIndex,
+          },
+        });
+
         setSaveState("saved");
       } catch (e) {
         enqueueSnackbar((e as Error).message, { variant: "error" });
@@ -121,6 +130,7 @@ export default function SideDrawerFields({ row }: ISideDrawerFieldsProps) {
           onDirty={onDirty}
           onSubmit={onSubmit}
           isDirty={dirtyField === field.key}
+          row={row}
         />
       ))}
 
@@ -128,7 +138,17 @@ export default function SideDrawerFields({ row }: ISideDrawerFieldsProps) {
         type="debug"
         fieldName="_rowy_ref.path"
         label="Document path"
-        debugText={row._rowy_ref.path ?? row._rowy_ref.id ?? "No ref"}
+        debugText={
+          row._rowy_ref.arrayTableData
+            ? row._rowy_ref.path +
+              " → " +
+              row._rowy_ref.arrayTableData.parentField +
+              "[" +
+              row._rowy_ref.arrayTableData.index +
+              "]"
+            : row._rowy_ref.path
+        }
+        debugValue={row._rowy_ref.path ?? row._rowy_ref.id ?? "No ref"}
       />
 
       {userDocHiddenFields.length > 0 && (

@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import { DocumentPath as DocumentPathIcon } from "@src/assets/icons";
 import LaunchIcon from "@mui/icons-material/Launch";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LockIcon from "@mui/icons-material/LockOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 
@@ -18,13 +19,15 @@ import { InlineErrorFallback } from "@src/components/ErrorFallback";
 import FieldSkeleton from "./FieldSkeleton";
 
 import {
-  globalScope,
+  projectScope,
   projectIdAtom,
   altPressAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { FieldType } from "@src/constants/fields";
 import { getFieldProp } from "@src/components/fields";
 import { getLabelId, getFieldId } from "./utils";
+import { useSnackbar } from "notistack";
+import { copyToClipboard } from "@src/utils/ui";
 
 export interface IFieldWrapperProps {
   children?: React.ReactNode;
@@ -32,6 +35,7 @@ export interface IFieldWrapperProps {
   fieldName?: string;
   label?: React.ReactNode;
   debugText?: React.ReactNode;
+  debugValue?: React.ReactNode;
   disabled?: boolean;
   hidden?: boolean;
   index?: number;
@@ -43,13 +47,14 @@ export default function FieldWrapper({
   fieldName,
   label,
   debugText,
+  debugValue,
   disabled,
   hidden,
   index,
 }: IFieldWrapperProps) {
-  const [projectId] = useAtom(projectIdAtom, globalScope);
-  const [altPress] = useAtom(altPressAtom, globalScope);
-
+  const [projectId] = useAtom(projectIdAtom, projectScope);
+  const [altPress] = useAtom(altPressAtom, projectScope);
+  const { enqueueSnackbar } = useSnackbar();
   return (
     <div>
       <Stack
@@ -97,7 +102,7 @@ export default function FieldWrapper({
       <ErrorBoundary FallbackComponent={InlineErrorFallback}>
         <Suspense fallback={<FieldSkeleton />}>
           {children ??
-            (!debugText && (
+            (!debugValue && (
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -109,7 +114,7 @@ export default function FieldWrapper({
         </Suspense>
       </ErrorBoundary>
 
-      {debugText && (
+      {debugValue && (
         <Stack direction="row" alignItems="center">
           <Typography
             variant="body2"
@@ -126,10 +131,17 @@ export default function FieldWrapper({
           >
             {debugText}
           </Typography>
-
+          <IconButton
+            onClick={() => {
+              copyToClipboard(debugValue as string);
+              enqueueSnackbar("Copied!");
+            }}
+          >
+            <ContentCopyIcon />
+          </IconButton>
           <IconButton
             href={`https://console.firebase.google.com/project/${projectId}/firestore/data/~2F${(
-              debugText as string
+              debugValue as string
             ).replace(/\//g, "~2F")}`}
             target="_blank"
             rel="noopener"

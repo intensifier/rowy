@@ -1,9 +1,18 @@
 import MultiSelect from "@rowy/multiselect";
-import { ListItemIcon } from "@mui/material";
+import { Box, ListItemIcon, Typography } from "@mui/material";
+import Fuse from 'fuse.js';
 
 import { FIELDS } from "@src/components/fields";
 import { FieldType } from "@src/constants/fields";
 import { getFieldProp } from "@src/components/fields";
+
+import { useSetAtom, useAtom } from "jotai";
+import {
+  projectScope,
+  projectSettingsAtom,
+  rowyRunModalAtom,
+} from "@src/atoms/projectScope";
+import { tableScope, tableSettingsAtom } from "@src/atoms/tableScope";
 
 export interface IFieldsDropdownProps {
   value: FieldType | "";
@@ -11,7 +20,17 @@ export interface IFieldsDropdownProps {
   hideLabel?: boolean;
   label?: string;
   options?: FieldType[];
+
   [key: string]: any;
+}
+
+export interface OptionsType {
+  label: string;
+  value: string;
+  disabled: boolean;
+  requireCloudFunctionSetup: boolean;
+  requireCollectionTable: boolean;
+  keywords: string[];
 }
 
 /**
@@ -25,13 +44,38 @@ export default function FieldsDropdown({
   options: optionsProp,
   ...props
 }: IFieldsDropdownProps) {
+  const [projectSettings] = useAtom(projectSettingsAtom, projectScope);
+  const openRowyRunModal = useSetAtom(rowyRunModalAtom, projectScope);
+  const [tableSettings] = useAtom(tableSettingsAtom, tableScope);
   const fieldTypesToDisplay = optionsProp
     ? FIELDS.filter((fieldConfig) => optionsProp.indexOf(fieldConfig.type) > -1)
     : FIELDS;
-  const options = fieldTypesToDisplay.map((fieldConfig) => ({
-    label: fieldConfig.name,
-    value: fieldConfig.type,
-  }));
+  const options = fieldTypesToDisplay.map((fieldConfig) => {
+    const requireCloudFunctionSetup =
+      fieldConfig.requireCloudFunction && !projectSettings.rowyRunUrl;
+    const requireCollectionTable =
+      tableSettings.isCollection === false &&
+      fieldConfig.requireCollectionTable === true;
+    return {
+      label: fieldConfig.name,
+      value: fieldConfig.type,
+      disabled: requireCloudFunctionSetup || requireCollectionTable,
+      requireCloudFunctionSetup,
+      requireCollectionTable,
+      keywords: fieldConfig.keywords || []
+    };
+  });
+
+  const filterOptions = (options: OptionsType[], inputConfig: any) => {
+    const fuse = new Fuse(options, {
+      keys: [{name:'label', weight: 2}, 'keywords'],
+      includeScore: true,
+      threshold: 0.4, 
+    });
+  
+    const results = fuse.search(inputConfig?.inputValue);
+    return results.length > 0 ? results.map((result) => result.item) : options;
+  }
 
   return (
     <MultiSelect
@@ -44,6 +88,21 @@ export default function FieldsDropdown({
         AutocompleteProps: {
           groupBy: (option: typeof options[number]) =>
             getFieldProp("group", option.value),
+          ListboxProps: {
+            sx: {
+              '& li.MuiAutocomplete-option[aria-disabled="true"]': {
+                opacity: 1,
+              },
+              '& li.MuiAutocomplete-option[aria-disabled="true"] > *': {
+                opacity: 0.4,
+              },
+              '& li.MuiAutocomplete-option[aria-disabled="true"] > .require-cloud-function':
+                {
+                  opacity: 1,
+                },
+            },
+          },
+          filterOptions
         },
       } as any)}
       itemRenderer={(option) => (
@@ -51,7 +110,44 @@ export default function FieldsDropdown({
           <ListItemIcon style={{ minWidth: 40 }}>
             {getFieldProp("icon", option.value as FieldType)}
           </ListItemIcon>
-          {option.label}
+          <Typography>{option.label}</Typography>
+          {option.requireCollectionTable ? (
+            <Typography
+              color="error"
+              variant="inherit"
+              component="span"
+              marginLeft={1}
+              className={"require-cloud-function"}
+            >
+              {" "}
+              Unavailable
+            </Typography>
+          ) : option.requireCloudFunctionSetup ? (
+            <Typography
+              color="error"
+              variant="inherit"
+              component="span"
+              marginLeft={1}
+              className={"require-cloud-function"}
+            >
+              {" "}
+              Requires
+              <span
+                style={{
+                  marginLeft: "3px",
+                  cursor: "pointer",
+                  pointerEvents: "all",
+                  textDecoration: "underline",
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openRowyRunModal({ feature: option.label });
+                }}
+              >
+                Cloud Function
+              </span>
+            </Typography>
+          ) : null}
         </>
       )}
       label={label || "Field type"}

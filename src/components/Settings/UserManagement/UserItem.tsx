@@ -15,19 +15,20 @@ import { Copy as CopyIcon } from "@src/assets/icons";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 
 import MultiSelect from "@rowy/multiselect";
+import EmojiAvatar from "@src/components/EmojiAvatar";
 
 import {
-  globalScope,
+  projectScope,
   projectRolesAtom,
   projectSettingsAtom,
   rowyRunAtom,
   rowyRunModalAtom,
-  UserSettings,
   updateUserAtom,
   confirmDialogAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { runRoutes } from "@src/constants/runRoutes";
 import { USERS } from "@src/config/dbPaths";
+import type { UserSettings } from "@src/types/settings";
 
 export default function UserItem({
   _rowy_ref,
@@ -35,31 +36,34 @@ export default function UserItem({
   roles: rolesProp,
 }: UserSettings) {
   const { enqueueSnackbar, closeSnackbar } = useSnackbar();
-  const confirm = useSetAtom(confirmDialogAtom, globalScope);
-  const openRowyRunModal = useSetAtom(rowyRunModalAtom, globalScope);
+  const confirm = useSetAtom(confirmDialogAtom, projectScope);
+  const openRowyRunModal = useSetAtom(rowyRunModalAtom, projectScope);
 
-  const [projectRoles] = useAtom(projectRolesAtom, globalScope);
-  const [projectSettings] = useAtom(projectSettingsAtom, globalScope);
-  const [rowyRun] = useAtom(rowyRunAtom, globalScope);
-  const [updateUser] = useAtom(updateUserAtom, globalScope);
+  const [projectRoles] = useAtom(projectRolesAtom, projectScope);
+  const [projectSettings] = useAtom(projectSettingsAtom, projectScope);
+  const [rowyRun] = useAtom(rowyRunAtom, projectScope);
+  const [updateUser] = useAtom(updateUserAtom, projectScope);
 
   const [value, setValue] = useState(Array.isArray(rolesProp) ? rolesProp : []);
   const allRoles = new Set(["ADMIN", ...(projectRoles ?? []), ...value]);
+  const hasRowyRun = !!projectSettings.rowyRunUrl;
 
   const handleSave = async () => {
+    if (!hasRowyRun) {
+      openRowyRunModal({ feature: "User Management" });
+      return;
+    }
     try {
       if (!user) throw new Error("User is not defined");
       if (JSON.stringify(value) === JSON.stringify(rolesProp)) return;
-
       const loadingSnackbarId = enqueueSnackbar("Setting roles…");
-
-      const res = await rowyRun?.({
+      const res = await rowyRun({
         route: runRoutes.setUserRoles,
         body: { email: user!.email, roles: value },
       });
       if (res.success) {
         if (!updateUser) throw new Error("Could not update user document");
-        await updateUser(_rowy_ref!.id, { roles: value });
+        await updateUser(_rowy_ref!.path, { roles: value });
         closeSnackbar(loadingSnackbarId);
         enqueueSnackbar(`Set roles for ${user!.email}: ${value.join(", ")}`);
       }
@@ -72,9 +76,10 @@ export default function UserItem({
   const listItemChildren = (
     <>
       <ListItemAvatar>
-        <Avatar src={user?.photoURL}>
-          {user?.displayName ? user.displayName[0] : undefined}
-        </Avatar>
+        <EmojiAvatar
+          src={user?.photoURL}
+          fallback={user?.displayName || _rowy_ref?.id || "?"}
+        />
       </ListItemAvatar>
       <ListItemText
         primary={user?.displayName}
@@ -89,7 +94,7 @@ export default function UserItem({
   );
 
   const handleDelete = async () => {
-    if (!projectSettings.rowyRunUrl) {
+    if (!hasRowyRun) {
       openRowyRunModal({ feature: "User Management" });
       return;
     }

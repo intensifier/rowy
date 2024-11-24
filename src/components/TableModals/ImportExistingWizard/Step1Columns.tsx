@@ -20,7 +20,7 @@ import DragHandleIcon from "@mui/icons-material/DragHandle";
 import { AddColumn as AddColumnIcon } from "@src/assets/icons";
 
 import ScrollableList from "@src/components/TableModals/ScrollableList";
-import Column from "@src/components/Table/Column";
+import Column from "@src/components/Table/Mock/Column";
 import EmptyState from "@src/components/EmptyState";
 
 import { tableScope, tableRowsAtom } from "@src/atoms/tableScope";
@@ -117,7 +117,11 @@ export default function Step1Columns({ config, setConfig }: IStepProps) {
                   color="default"
                 />
               }
-              label="Select all"
+              label={
+                selectedFields.length === allFields.length
+                  ? "Clear all"
+                  : "Select all"
+              }
               sx={{
                 height: 42,
                 mr: 0,

@@ -1,14 +1,11 @@
 import { lazy } from "react";
 import { IFieldConfig, FieldType } from "@src/components/fields/types";
-import withBasicCell from "@src/components/fields/_withTableCell/withBasicCell";
+import withRenderTableCell from "@src/components/Table/TableCell/withRenderTableCell";
 
 import DurationIcon from "@mui/icons-material/TimerOutlined";
-import BasicCell from "@src/components/fields/_BasicCell/BasicCellNull";
-import withSideDrawerEditor from "@src/components/Table/editors/withSideDrawerEditor";
+import DisplayCell from "./DisplayCell";
+import BasicContextMenuActions from "@src/components/Table/ContextMenu/BasicCellContextMenuActions";
 
-const TableCell = lazy(
-  () => import("./TableCell" /* webpackChunkName: "TableCell-Duration" */)
-);
 const SideDrawerField = lazy(
   () =>
     import(
@@ -24,8 +21,10 @@ export const config: IFieldConfig = {
   initialValue: {},
   icon: <DurationIcon />,
   description: "Duration calculated from two timestamps.",
-  TableCell: withBasicCell(TableCell),
-  TableEditor: withSideDrawerEditor(TableCell),
+  TableCell: withRenderTableCell(DisplayCell, SideDrawerField, "popover", {
+    popoverProps: { PaperProps: { sx: { p: 1 } } },
+  }),
   SideDrawerField,
+  contextMenuActions: BasicContextMenuActions,
 };
 export default config;

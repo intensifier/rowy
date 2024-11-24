@@ -1,24 +1,20 @@
 import { lazy } from "react";
 import { IFieldConfig, FieldType } from "@src/components/fields/types";
+import withRenderTableCell from "@src/components/Table/TableCell/withRenderTableCell";
 
 import { Reference } from "@src/assets/icons";
-//import InlineCell from "./InlineCell";
-import BasicCell from "./BasicCell";
+import DisplayCell from "./DisplayCell";
+import EditorCell from "./EditorCell";
 import { filterOperators } from "@src/components/fields/ShortText/Filter";
-import withBasicCell from "@src/components/fields/_withTableCell/withBasicCell";
+import { valueFormatter } from "./filters";
+import BasicContextMenuActions from "@src/components/Table/ContextMenu/BasicCellContextMenuActions";
 
-const EditorCell = lazy(
-  () => import("./EditorCell" /* webpackChunkName: "EditorCell-Reference" */)
-);
 const SideDrawerField = lazy(
   () =>
     import(
       "./SideDrawerField" /* webpackChunkName: "SideDrawerField-Reference" */
     )
 );
-// const Settings = lazy(
-//   () => import("./Settings" /* webpackChunkName: "Settings-Reference" */)
-// );
 
 export const config: IFieldConfig = {
   type: FieldType.reference,
@@ -29,10 +25,12 @@ export const config: IFieldConfig = {
   initializable: true,
   icon: <Reference />,
   description: "Firestore document reference",
-  TableCell: withBasicCell(BasicCell),
-  TableEditor: EditorCell,
+  contextMenuActions: BasicContextMenuActions,
+  TableCell: withRenderTableCell(DisplayCell, EditorCell, "focus", {
+    disablePadding: true,
+  }),
   SideDrawerField,
-  //settings: Settings,
-  filter: { operators: filterOperators },
+  filter: { operators: filterOperators, valueFormatter: valueFormatter },
+  csvExportFormatter: (value: any) => value?.path,
 };
 export default config;

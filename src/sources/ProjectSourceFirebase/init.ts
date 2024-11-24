@@ -4,23 +4,26 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import {
   initializeFirestore,
   connectFirestoreEmulator,
-  enableMultiTabIndexedDbPersistence,
+  persistentLocalCache,
+  persistentMultipleTabManager,
 } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
 export const envConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_PROJECT_WEB_API_KEY,
-  authDomain: `${process.env.REACT_APP_FIREBASE_PROJECT_ID}.firebaseapp.com`,
-  databaseURL: `https://${process.env.REACT_APP_FIREBASE_PROJECT_ID}.firebaseio.com`,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: `${process.env.REACT_APP_FIREBASE_PROJECT_ID}.appspot.com`,
+  apiKey: import.meta.env.VITE_APP_FIREBASE_PROJECT_WEB_API_KEY,
+  authDomain: `${import.meta.env.VITE_APP_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  databaseURL: `https://${
+    import.meta.env.VITE_APP_FIREBASE_PROJECT_ID
+  }.firebaseio.com`,
+  projectId: import.meta.env.VITE_APP_FIREBASE_PROJECT_ID,
+  storageBucket: `${import.meta.env.VITE_APP_FIREBASE_PROJECT_ID}.appspot.com`,
 };
 
 // Connect emulators based on env vars
 const envConnectEmulators =
-  process.env.NODE_ENV === "test" ||
-  process.env.REACT_APP_FIREBASE_EMULATORS === "true";
+  import.meta.env.NODE_ENV === "test" ||
+  import.meta.env.VITE_APP_FIREBASE_EMULATORS === "true";
 
 /**
  * Store Firebase config here so it can be set programmatically.
@@ -57,10 +60,12 @@ export const firebaseAuthAtom = atom((get) => {
 export const firebaseDbAtom = atom((get) => {
   const db = initializeFirestore(get(firebaseAppAtom), {
     ignoreUndefinedProperties: true,
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
   });
   if (!(window as any).firebaseDbStarted) {
     if (envConnectEmulators) connectFirestoreEmulator(db, "localhost", 9299);
-    else enableMultiTabIndexedDbPersistence(db);
     (window as any).firebaseDbStarted = true;
   }
   return db;

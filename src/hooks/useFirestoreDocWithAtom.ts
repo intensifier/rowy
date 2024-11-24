@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import useMemoValue from "use-memo-value";
 import { useAtom, PrimitiveAtom, useSetAtom } from "jotai";
-import { Scope } from "jotai/core/atom";
 import { set } from "lodash-es";
+import { useSnackbar } from "notistack";
+
 import {
   Firestore,
   doc,
@@ -15,7 +16,7 @@ import {
 } from "firebase/firestore";
 import { useErrorHandler } from "react-error-boundary";
 
-import { globalScope } from "@src/atoms/globalScope";
+import { projectScope } from "@src/atoms/projectScope";
 import { UpdateDocFunction, TableRow } from "@src/types/table";
 import { firebaseDbAtom } from "@src/sources/ProjectSourceFirebase";
 
@@ -35,7 +36,7 @@ interface IUseFirestoreDocWithAtomOptions<T> {
 
 /**
  * Attaches a listener for a Firestore document and unsubscribes on unmount.
- * Gets the Firestore instance initiated in globalScope.
+ * Gets the Firestore instance initiated in projectScope.
  * Updates an atom and Suspends that atom until the first snapshot is received.
  *
  * @param dataAtom - Atom to store data in
@@ -45,7 +46,7 @@ interface IUseFirestoreDocWithAtomOptions<T> {
  */
 export function useFirestoreDocWithAtom<T = TableRow>(
   dataAtom: PrimitiveAtom<T>,
-  dataScope: Scope | undefined,
+  dataScope: Parameters<typeof useAtom>[1] | undefined,
   path: string | undefined,
   options?: IUseFirestoreDocWithAtomOptions<T>
 ) {
@@ -58,13 +59,14 @@ export function useFirestoreDocWithAtom<T = TableRow>(
     updateDataAtom,
   } = options || {};
 
-  const [firebaseDb] = useAtom(firebaseDbAtom, globalScope);
+  const [firebaseDb] = useAtom(firebaseDbAtom, projectScope);
   const setDataAtom = useSetAtom(dataAtom, dataScope);
   const setUpdateDataAtom = useSetAtom(
     options?.updateDataAtom || (dataAtom as any),
     dataScope
   );
   const handleError = useErrorHandler();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Create the doc ref and memoize using Firestore’s refEqual
   const memoizedDocRef = useMemoValue(
@@ -86,11 +88,15 @@ export function useFirestoreDocWithAtom<T = TableRow>(
     // Create a listener for the document
     const unsubscribe = onSnapshot(
       memoizedDocRef,
+      { includeMetadataChanges: true },
       (docSnapshot) => {
         try {
-          // Create doc if it doesn’t exist
+          // If doc doesn’t exist, set data atom to default value
+          // But don’t create a new document in db, since this has previously
+          // caused documents to be reset, and the bug is hard to reproduce.
+          // Instead, when the user updates the document, it will be created.
           if (!docSnapshot.exists() && !!createIfNonExistent) {
-            setDoc(docSnapshot.ref, createIfNonExistent);
+            // Temporarily set the data atom to the default data
             setDataAtom({ ...createIfNonExistent, _rowy_ref: docSnapshot.ref });
           } else {
             setDataAtom({
@@ -122,8 +128,6 @@ export function useFirestoreDocWithAtom<T = TableRow>(
     disableSuspense,
     createIfNonExistent,
     handleError,
-    updateDataAtom,
-    setUpdateDataAtom,
   ]);
 
   // Set updateDocAtom and deleteDocAtom values if they exist
@@ -144,7 +148,11 @@ export function useFirestoreDocWithAtom<T = TableRow>(
           }
         }
 
-        return setDoc(memoizedDocRef, updateToDb, { merge: true });
+        return setDoc(memoizedDocRef, updateToDb, { merge: true }).catch(
+          (e) => {
+            enqueueSnackbar((e as Error).message, { variant: "error" });
+          }
+        );
       });
     }
 
@@ -153,7 +161,7 @@ export function useFirestoreDocWithAtom<T = TableRow>(
       // reset the atom’s value to prevent writes
       if (updateDataAtom) setUpdateDataAtom(undefined);
     };
-  }, [memoizedDocRef, updateDataAtom, setUpdateDataAtom]);
+  }, [memoizedDocRef, updateDataAtom, setUpdateDataAtom, enqueueSnackbar]);
 }
 
 export default useFirestoreDocWithAtom;
@@ -162,12 +170,12 @@ export default useFirestoreDocWithAtom;
  * Create the Firestore document reference.
  * Put code in a function so the results can be compared by useMemoValue.
  */
-const getDocRef = <T>(
+export const getDocRef = <T>(
   firebaseDb: Firestore,
   path: string | undefined,
   pathSegments?: Array<string | undefined>
 ) => {
-  if (!path || (Array.isArray(pathSegments) && pathSegments.some((x) => !x)))
+  if (!path || (Array.isArray(pathSegments) && pathSegments?.some((x) => !x)))
     return null;
 
   return doc(

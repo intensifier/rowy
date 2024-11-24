@@ -35,7 +35,7 @@ export default function Step1Endpoint({
       />
 
       {webhookObject.auth?.enabled &&
-        webhookSchemas[webhookObject.type].auth(
+        webhookSchemas[webhookObject.type].Auth(
           webhookObject,
           setWebhookObject
         )}

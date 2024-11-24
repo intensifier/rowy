@@ -9,18 +9,17 @@ import FieldsDropdown from "@src/components/ColumnModals/FieldsDropdown";
 import CodeEditorHelper from "@src/components/CodeEditor/CodeEditorHelper";
 
 import {
-  globalScope,
+  projectScope,
   compatibleRowyRunVersionAtom,
   projectSettingsAtom,
   rowyRunModalAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { tableScope, tableColumnsOrderedAtom } from "@src/atoms/tableScope";
 import { FieldType } from "@src/constants/fields";
 import { WIKI_LINKS } from "@src/constants/externalLinks";
 
 import { getFieldProp } from "@src/components/fields";
-/* eslint-disable import/no-webpack-loader-syntax */
-import derivativeDefs from "!!raw-loader!./derivative.d.ts";
+import derivativeDefs from "./derivative.d.ts?raw";
 
 const CodeEditor = lazy(
   () =>
@@ -40,12 +39,12 @@ export default function Settings({
   onBlur,
   errors,
 }: ISettingsProps) {
-  const [projectSettings] = useAtom(projectSettingsAtom, globalScope);
+  const [projectSettings] = useAtom(projectSettingsAtom, projectScope);
   const [compatibleRowyRunVersion] = useAtom(
     compatibleRowyRunVersionAtom,
-    globalScope
+    projectScope
   );
-  const openRowyRunModal = useSetAtom(rowyRunModalAtom, globalScope);
+  const openRowyRunModal = useSetAtom(rowyRunModalAtom, projectScope);
   const [tableColumnsOrdered] = useAtom(tableColumnsOrderedAtom, tableScope);
 
   useEffect(() => {
@@ -65,16 +64,27 @@ export default function Settings({
     : config.derivativeFn
     ? config.derivativeFn
     : config?.script
-    ? `const derivative:Derivative = async ({row,ref,db,storage,auth})=>{
-    ${config.script.replace(/utilFns.getSecret/g, "rowy.secrets.get")}
-  }`
-    : `const derivative:Derivative = async ({row,ref,db,storage,auth})=>{
-    // Write your derivative code here
-    // for example:
-    // const sum = row.a + row.b;
-    // return sum;
-    // checkout the documentation for more info: https://docs.rowy.io/field-types/derivative
-  }`;
+    ? `const derivative:Derivative = async ({row,ref,db,storage,auth,logging})=>{
+  logging.log("derivative started")
+  
+  // Import any NPM package needed
+  // const lodash = require('lodash');
+  
+  ${config.script.replace(/utilFns.getSecret/g, "rowy.secrets.get")}
+}`
+    : `// Import any NPM package needed
+// import _ from "lodash";
+
+const derivative: Derivative = async ({ row, ref, db, storage, auth, logging }) => {
+  logging.log("derivative started");
+
+  // Example:
+  // const sum = row.a + row.b;
+  // return sum;
+};
+
+export default derivative;
+`;
 
   return (
     <>
@@ -135,7 +145,19 @@ export default function Settings({
 
       <div>
         <InputLabel>Derivative script</InputLabel>
-        <CodeEditorHelper docLink={WIKI_LINKS.fieldTypesDerivative} />
+        <CodeEditorHelper
+          docLink={WIKI_LINKS.fieldTypesDerivative}
+          additionalVariables={[
+            {
+              key: "row",
+              description: `row has the value of doc.data() it has type definitions using this table's schema, but you can access any field in the document.`,
+            },
+            {
+              key: "ref",
+              description: `reference object that represents the reference to the current row in firestore db (ie: doc.ref).`,
+            },
+          ]}
+        />
         <Suspense fallback={<FieldSkeleton height={200} />}>
           <CodeEditor
             diagnosticsOptions={

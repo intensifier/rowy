@@ -1,11 +1,14 @@
 import { ISideDrawerFieldProps } from "@src/components/fields/types";
 
-import { Grid } from "@mui/material";
+import { Grid, Button, Tooltip, useTheme } from "@mui/material";
+import WarningIcon from "@mui/icons-material/WarningAmber";
 import MultiSelectComponent from "@rowy/multiselect";
 import FormattedChip from "@src/components/FormattedChip";
 
+import { fieldSx } from "@src/components/SideDrawer/utils";
 import { sanitiseValue } from "./utils";
-import { ConvertStringToArray } from "./ConvertStringToArray";
+import { getColors } from "@src/components/fields/SingleSelect/Settings";
+import palette, { paletteToMui } from "@src/theme/palette";
 
 export default function MultiSelect({
   column,
@@ -14,7 +17,10 @@ export default function MultiSelect({
   onSubmit,
   disabled,
 }: ISideDrawerFieldProps) {
+  const defaultColor = paletteToMui(palette.aGray);
   const config = column.config ?? {};
+  const colors = column.config?.colors ?? [];
+  const { mode } = useTheme().palette;
 
   const handleDelete = (index: number) => () => {
     const newValues = [...value];
@@ -24,7 +30,28 @@ export default function MultiSelect({
   };
 
   if (typeof value === "string" && value !== "")
-    return <ConvertStringToArray value={value} onSubmit={onChange} />;
+    return (
+      <Grid container wrap="nowrap" gap={1}>
+        <Grid item xs sx={fieldSx}>
+          <Tooltip title="This cell’s value is a string and needs to be converted to an array">
+            <WarningIcon color="action" style={{ verticalAlign: "middle" }} />
+          </Tooltip>
+          &nbsp;{value}
+        </Grid>
+        <Grid item>
+          <Button
+            color="primary"
+            onClick={() => {
+              onChange([value]);
+              onSubmit();
+            }}
+            disabled={disabled}
+          >
+            Convert to array
+          </Button>
+        </Grid>
+      </Grid>
+    );
 
   return (
     <>
@@ -53,6 +80,10 @@ export default function MultiSelect({
                   <FormattedChip
                     label={item}
                     onDelete={disabled ? undefined : handleDelete(i)}
+                    sx={{
+                      backgroundColor:
+                        getColors(colors, item)[mode] || defaultColor[mode],
+                    }}
                   />
                 </Grid>
               )

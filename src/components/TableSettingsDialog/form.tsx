@@ -1,6 +1,11 @@
 import { find } from "lodash-es";
+import { useAtom } from "jotai";
 import { Field, FieldType } from "@rowy/form-builder";
-import { TableSettingsDialogState } from "@src/atoms/globalScope";
+import {
+  projectIdAtom,
+  projectScope,
+  TableSettingsDialogState,
+} from "@src/atoms/projectScope";
 
 import { Link, ListItemText, Typography } from "@mui/material";
 import OpenInNewIcon from "@src/components/InlineOpenInNewIcon";
@@ -8,6 +13,21 @@ import WarningIcon from "@mui/icons-material/WarningAmber";
 
 import { WIKI_LINKS } from "@src/constants/externalLinks";
 import { FieldType as TableFieldType } from "@src/constants/fields";
+
+function CollectionLink() {
+  const [projectId] = useAtom(projectIdAtom, projectScope);
+
+  return (
+    <Link
+      href={`https://console.firebase.google.com/project/${projectId}/firestore/data`}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Your collections
+      <OpenInNewIcon />
+    </Link>
+  );
+}
 
 export const tableSettings = (
   mode: TableSettingsDialogState["mode"],
@@ -105,14 +125,7 @@ export const tableSettings = (
               ) : (
                 "Choose which Firestore collection to display."
               )}{" "}
-              <Link
-                href={`https://console.firebase.google.com/project/_/firestore/data`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Your collections
-                <OpenInNewIcon />
-              </Link>
+              <CollectionLink />
             </>
           ),
           AddButtonProps: {
@@ -136,6 +149,7 @@ export const tableSettings = (
           // https://firebase.google.com/docs/firestore/quotas#collections_documents_and_fields
           validation: [
             ["matches", /^[^\s]+$/, "Collection name cannot have spaces"],
+            ["matches", /^[^.]+$/, "Collection name cannot have dots"],
             ["notOneOf", [".", ".."], "Collection name cannot be . or .."],
             [
               "test",
@@ -181,6 +195,7 @@ export const tableSettings = (
           // https://firebase.google.com/docs/firestore/quotas#collections_documents_and_fields
           validation: [
             ["matches", /^[^\s]+$/, "Collection name cannot have spaces"],
+            ["matches", /^[^.]+$/, "Collection name cannot have dots"],
             ["notOneOf", [".", ".."], "Collection name cannot be . or .."],
             [
               "test",
@@ -215,8 +230,9 @@ export const tableSettings = (
       }.`,
       disabled: mode === "update",
       gridCols: { xs: 12, sm: 6 },
-      validation:
-        mode === "create"
+      validation: [
+        ["matches", /^[^/]+$/g, "ID cannot have /"],
+        ...(mode === "create"
           ? [
               [
                 "test",
@@ -225,7 +241,8 @@ export const tableSettings = (
                 (value: any) => !find(tables, ["value", value]),
               ],
             ]
-          : [],
+          : []),
+      ],
     },
     {
       step: "display",
@@ -242,7 +259,23 @@ export const tableSettings = (
       type: FieldType.paragraph,
       name: "description",
       label: "Description (optional)",
-      minRows: 2,
+    },
+    {
+      step: "display",
+      type: "tableDetails",
+      name: "details",
+      label: "Details (optional)",
+    },
+    {
+      step: "display",
+      type: "tableThumbnail",
+      name: "thumbnailFile",
+      label: "Thumbnail image (optional)",
+    },
+    {
+      step: "display",
+      type: FieldType.hidden,
+      name: "thumbnailURL",
     },
 
     // Step 3: Access controls
@@ -293,6 +326,17 @@ export const tableSettings = (
       label: "Suggested Firestore Rules",
       watchedField: "collection",
     },
+    {
+      step: "accessControls",
+      type: FieldType.multiSelect,
+      name: "modifiableBy",
+      label: "Modifiable by",
+      labelPlural: "Modifier Roles",
+      options: roles ?? [],
+      defaultValue: ["ADMIN"],
+      required: true,
+      freeText: true,
+    },
 
     // Step 4: Auditing
     {
@@ -300,7 +344,7 @@ export const tableSettings = (
       type: FieldType.checkbox,
       name: "audit",
       label: "Enable auditing for this table",
-      defaultValue: true,
+      defaultValue: false,
     },
     {
       step: "auditing",

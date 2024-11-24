@@ -2,24 +2,28 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAtom } from "jotai";
 
+import { Backdrop } from "@mui/material";
 import Loading from "@src/components/Loading";
 import ProjectSourceFirebase from "@src/sources/ProjectSourceFirebase";
+import MembersSourceFirebase from "@src/sources/MembersSourceFirebase";
 import ConfirmDialog from "@src/components/ConfirmDialog";
 import RowyRunModal from "@src/components/RowyRunModal";
 import NotFound from "@src/pages/NotFoundPage";
 import RequireAuth from "@src/layouts/RequireAuth";
+import AdminRoute from "@src/layouts/AdminRoute";
 
 import {
-  globalScope,
+  projectScope,
   currentUserAtom,
+  userRolesAtom,
   altPressAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { ROUTES } from "@src/constants/routes";
 import useKeyPressWithAtom from "@src/hooks/useKeyPressWithAtom";
 
 import TableGroupRedirectPage from "./pages/TableGroupRedirectPage";
-import JotaiTestPage from "@src/pages/Test/JotaiTestPage";
 import SignOutPage from "@src/pages/Auth/SignOutPage";
+import ProvidedArraySubTablePage from "./pages/Table/ProvidedArraySubTablePage";
 
 // prettier-ignore
 const AuthPage = lazy(() => import("@src/pages/Auth/AuthPage" /* webpackChunkName: "AuthPage" */));
@@ -37,6 +41,12 @@ const SetupPage = lazy(() => import("@src/pages/SetupPage" /* webpackChunkName: 
 const Navigation = lazy(() => import("@src/layouts/Navigation" /* webpackChunkName: "Navigation" */));
 // prettier-ignore
 const TableSettingsDialog = lazy(() => import("@src/components/TableSettingsDialog" /* webpackChunkName: "TableSettingsDialog" */));
+const ProjectSettingsDialog = lazy(
+  () =>
+    import(
+      "@src/components/ProjectSettingsDialog" /* webpackChunkName: "ProjectSettingsDialog" */
+    )
+);
 
 // prettier-ignore
 const TablesPage = lazy(() => import("@src/pages/TablesPage" /* webpackChunkName: "TablesPage" */));
@@ -44,29 +54,27 @@ const TablesPage = lazy(() => import("@src/pages/TablesPage" /* webpackChunkName
 const ProvidedTablePage = lazy(() => import("@src/pages/Table/ProvidedTablePage" /* webpackChunkName: "ProvidedTablePage" */));
 // prettier-ignore
 const ProvidedSubTablePage = lazy(() => import("@src/pages/Table/ProvidedSubTablePage" /* webpackChunkName: "ProvidedSubTablePage" */));
-
 // prettier-ignore
-const FunctionPage = lazy(() => import("@src/pages/FunctionPage" /* webpackChunkName: "FunctionPage" */));
+const TableTutorialPage = lazy(() => import("@src/pages/Table/TableTutorialPage" /* webpackChunkName: "TableTutorialPage" */));
+
 // prettier-ignore
 const UserSettingsPage = lazy(() => import("@src/pages/Settings/UserSettingsPage" /* webpackChunkName: "UserSettingsPage" */));
 // prettier-ignore
 const ProjectSettingsPage = lazy(() => import("@src/pages/Settings/ProjectSettingsPage" /* webpackChunkName: "ProjectSettingsPage" */));
 // prettier-ignore
-const UserManagementPage = lazy(() => import("@src/pages/Settings/UserManagementPage" /* webpackChunkName: "UserManagementPage" */));
+const MembersPage = lazy(() => import("@src/pages/Settings/MembersPage" /* webpackChunkName: "MembersPage" */));
 // prettier-ignore
-const DebugSettingsPage = lazy(() => import("@src/pages/Settings/DebugSettingsPage" /* webpackChunkName: "DebugSettingsPage" */));
-
-// prettier-ignore
-const ThemeTestPage = lazy(() => import("@src/pages/Test/ThemeTestPage" /* webpackChunkName: "ThemeTestPage" */));
-// const RowyRunTestPage = lazy(() => import("@src/pages/RowyRunTestPage" /* webpackChunkName: "RowyRunTestPage" */));
+const DebugPage = lazy(() => import("@src/pages/Settings/DebugPage" /* webpackChunkName: "DebugPage" */));
 
 export default function App() {
-  const [currentUser] = useAtom(currentUserAtom, globalScope);
-  useKeyPressWithAtom("Alt", altPressAtom, globalScope);
+  const [currentUser] = useAtom(currentUserAtom, projectScope);
+  const [userRoles] = useAtom(userRolesAtom, projectScope);
+  useKeyPressWithAtom("Alt", altPressAtom, projectScope);
 
   return (
     <Suspense fallback={<Loading fullScreen />}>
       <ProjectSourceFirebase />
+      {userRoles.includes("ADMIN") && <MembersSourceFirebase />}
       <ConfirmDialog />
       <RowyRunModal />
 
@@ -97,6 +105,7 @@ export default function App() {
               <RequireAuth>
                 <Navigation>
                   <TableSettingsDialog />
+                  <ProjectSettingsDialog />
                 </Navigation>
               </RequireAuth>
             }
@@ -114,7 +123,42 @@ export default function App() {
                   <Route index element={<NotFound />} />
                   <Route
                     path=":docPath/:subTableKey"
-                    element={<ProvidedSubTablePage />}
+                    element={
+                      <Suspense
+                        fallback={
+                          <Backdrop
+                            key="sub-table-modal-backdrop"
+                            open
+                            sx={{ zIndex: "modal" }}
+                          >
+                            <Loading />
+                          </Backdrop>
+                        }
+                      >
+                        <ProvidedSubTablePage />
+                      </Suspense>
+                    }
+                  />
+                </Route>
+                <Route path={ROUTES.arraySubTable}>
+                  <Route index element={<NotFound />} />
+                  <Route
+                    path=":docPath/:subTableKey"
+                    element={
+                      <Suspense
+                        fallback={
+                          <Backdrop
+                            key="sub-table-modal-backdrop"
+                            open
+                            sx={{ zIndex: "modal" }}
+                          >
+                            <Loading />
+                          </Backdrop>
+                        }
+                      >
+                        <ProvidedArraySubTablePage />
+                      </Suspense>
+                    }
                   />
                 </Route>
               </Route>
@@ -125,13 +169,11 @@ export default function App() {
               <Route path=":id" element={<TableGroupRedirectPage />} />
             </Route>
 
-            <Route path={ROUTES.function}>
-              <Route
-                index
-                element={<Navigate to={ROUTES.functions} replace />}
-              />
-              <Route path=":id" element={<FunctionPage />} />
-            </Route>
+            <Route
+              path={ROUTES.tableTutorial}
+              element={<TableTutorialPage />}
+            />
+
             <Route
               path={ROUTES.settings}
               element={<Navigate to={ROUTES.userSettings} replace />}
@@ -139,22 +181,16 @@ export default function App() {
             <Route path={ROUTES.userSettings} element={<UserSettingsPage />} />
             <Route
               path={ROUTES.projectSettings}
-              element={<ProjectSettingsPage />}
+              element={
+                <AdminRoute>
+                  <ProjectSettingsPage />
+                </AdminRoute>
+              }
             />
-            <Route
-              path={ROUTES.userManagement}
-              element={<UserManagementPage />}
-            />
-            <Route
-              path={ROUTES.debugSettings}
-              element={<DebugSettingsPage />}
-            />
-            {/* <Route path={ROUTES.rowyRunTest} element={<RowyRunTestPage />} /> */}
+            <Route path={ROUTES.members} element={<MembersPage />} />
 
-            <Route path="/test/jotai" element={<JotaiTestPage />} />
+            <Route path={ROUTES.debug} element={<DebugPage />} />
           </Route>
-
-          <Route path={ROUTES.themeTest} element={<ThemeTestPage />} />
         </Routes>
       )}
     </Suspense>

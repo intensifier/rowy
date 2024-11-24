@@ -1,10 +1,7 @@
 import { ISideDrawerFieldProps } from "@src/components/fields/types";
-import { useCallback, useState } from "react";
+import { useMemo } from "react";
 import { useSetAtom } from "jotai";
-
-import { useDropzone } from "react-dropzone";
-// TODO: GENERALIZE
-import useUploader from "@src/hooks/useFirebaseStorageUploader";
+import { assignIn } from "lodash-es";
 
 import {
   alpha,
@@ -20,12 +17,23 @@ import AddIcon from "@mui/icons-material/AddAPhotoOutlined";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import OpenIcon from "@mui/icons-material/OpenInNewOutlined";
 
+import { FileValue } from "@src/types/table";
 import Thumbnail from "@src/components/Thumbnail";
 import CircularProgressOptical from "@src/components/CircularProgressOptical";
 
-import { globalScope, confirmDialogAtom } from "@src/atoms/globalScope";
-import { IMAGE_MIME_TYPES } from ".";
+import { projectScope, confirmDialogAtom } from "@src/atoms/projectScope";
 import { fieldSx, getFieldId } from "@src/components/SideDrawer/utils";
+import useFileUpload from "@src/components/fields/File/useFileUpload";
+import { IMAGE_MIME_TYPES } from ".";
+
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+  ResponderProvided,
+} from "react-beautiful-dnd";
 
 const imgSx = {
   position: "relative",
@@ -84,57 +92,60 @@ export default function Image_({
   column,
   _rowy_ref,
   value,
-  onChange,
-  onSubmit,
   disabled,
 }: ISideDrawerFieldProps) {
-  const confirm = useSetAtom(confirmDialogAtom, globalScope);
-  const { uploaderState, upload, deleteUpload } = useUploader();
-  const { progress } = uploaderState;
+  const confirm = useSetAtom(confirmDialogAtom, projectScope);
 
-  // Store a preview image locally while uploading
-  const [localImage, setLocalImage] = useState<string>("");
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      const imageFile = acceptedFiles[0];
-
-      if (_rowy_ref && imageFile) {
-        upload({
-          docRef: _rowy_ref! as any,
-          fieldName: column.key,
-          files: [imageFile],
-          previousValue: value ?? [],
-          onComplete: (newValue) => {
-            onChange(newValue);
-            onSubmit();
-            setLocalImage("");
-          },
-        });
-        setLocalImage(URL.createObjectURL(imageFile));
-      }
-    },
-    [_rowy_ref, value]
-  );
-
-  const handleDelete = (index: number) => {
-    const newValue = [...value];
-    const toBeDeleted = newValue.splice(index, 1);
-    toBeDeleted.length && deleteUpload(toBeDeleted[0]);
-    onChange(newValue);
-    onSubmit();
-  };
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: false,
+  const {
+    loading,
+    progress,
+    handleDelete,
+    uploaderState,
+    localFiles,
+    dropzoneState,
+    handleUpdate,
+  } = useFileUpload(_rowy_ref, column.key, {
+    multiple: true,
     accept: IMAGE_MIME_TYPES,
   });
+
+  const localImages = useMemo(
+    () =>
+      localFiles.map((file) =>
+        assignIn(file, { localURL: URL.createObjectURL(file) })
+      ),
+    [localFiles]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = dropzoneState;
+
+  const onDragEnd = (result: DropResult, provided: ResponderProvided) => {
+    const { destination, source } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    const newValue = Array.from(value);
+
+    newValue.splice(source.index, 1);
+    newValue.splice(destination.index, 0, value[source.index]);
+
+    handleUpdate([...newValue]);
+  };
 
   return (
     <>
       {!disabled && (
         <ButtonBase
+          disabled={loading}
           sx={[
             fieldSx,
             {
@@ -160,107 +171,170 @@ export default function Image_({
               ? "Drop image here"
               : "Click to upload or drop image here"}
           </Typography>
-          <AddIcon sx={{ ml: 1, mr: 2 / 8 }} />
+          {loading ? (
+            <CircularProgressOptical
+              size={20}
+              variant={progress === 0 ? "indeterminate" : "determinate"}
+              value={progress}
+            />
+          ) : (
+            <AddIcon sx={{ ml: 1, mr: 2 / 8 }} />
+          )}
         </ButtonBase>
       )}
 
-      <Grid container spacing={1} style={{ marginTop: 0 }}>
-        {Array.isArray(value) &&
-          value.map((image, i) => (
-            <Grid item key={image.downloadURL}>
-              {disabled ? (
-                <Tooltip title="Open">
-                  <ButtonBase
-                    sx={imgSx}
-                    onClick={() => window.open(image.downloadURL, "_blank")}
-                    className="img"
-                  >
-                    <Thumbnail
-                      imageUrl={image.downloadURL}
-                      size="200x200"
-                      objectFit="contain"
-                      sx={thumbnailSx}
-                    />
-                    <Grid
-                      container
-                      justifyContent="center"
-                      alignItems="center"
-                      sx={[overlaySx, deleteImgHoverSx]}
-                    >
-                      {disabled ? <OpenIcon /> : <DeleteIcon color="error" />}
-                    </Grid>
-                  </ButtonBase>
-                </Tooltip>
-              ) : (
-                <div>
-                  <Box sx={imgSx} className="img">
-                    <Thumbnail
-                      imageUrl={image.downloadURL}
-                      size="200x200"
-                      objectFit="contain"
-                      sx={thumbnailSx}
-                    />
-                    <Grid
-                      container
-                      justifyContent="center"
-                      alignItems="center"
-                      sx={[overlaySx, deleteImgHoverSx]}
-                    >
-                      <Tooltip title="Delete…">
-                        <IconButton
-                          onClick={() =>
-                            confirm({
-                              title: "Delete image?",
-                              body: "This image cannot be recovered after",
-                              confirm: "Delete",
-                              confirmColor: "error",
-                              handleConfirm: () => handleDelete(i),
-                            })
-                          }
-                        >
-                          <DeleteIcon color="error" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Open">
-                        <IconButton
-                          onClick={() =>
-                            window.open(image.downloadURL, "_blank")
-                          }
-                        >
-                          <OpenIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Grid>
-                  </Box>
-                </div>
-              )}
-            </Grid>
-          ))}
-
-        {localImage && (
-          <Grid item>
-            <ButtonBase
-              sx={imgSx}
-              style={{ backgroundImage: `url("${localImage}")` }}
-              className="img"
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="sidebar-image-droppable" direction="horizontal">
+          {(provided) => (
+            <Grid
+              container
+              spacing={1}
+              style={{ marginTop: 0 }}
+              ref={provided.innerRef}
+              {...provided.droppableProps}
             >
-              <Grid
-                container
-                justifyContent="center"
-                alignItems="center"
-                sx={overlaySx}
-              >
-                <CircularProgressOptical
-                  color="inherit"
-                  size={48}
-                  variant={progress === 0 ? "indeterminate" : "determinate"}
-                  value={progress}
-                />
-              </Grid>
-            </ButtonBase>
-          </Grid>
-        )}
-      </Grid>
+              {Array.isArray(value) &&
+                value.map((image: FileValue, i) => (
+                  <Draggable
+                    key={image.downloadURL}
+                    draggableId={image.downloadURL}
+                    index={i}
+                  >
+                    {(provided) => (
+                      <Grid item>
+                        {disabled ? (
+                          <Tooltip title="Open">
+                            <ButtonBase
+                              sx={imgSx}
+                              onClick={() =>
+                                window.open(image.downloadURL, "_blank")
+                              }
+                              className="img"
+                            >
+                              <Thumbnail
+                                imageUrl={image.downloadURL}
+                                size="200x200"
+                                objectFit="contain"
+                                sx={thumbnailSx}
+                              />
+                              <Grid
+                                container
+                                justifyContent="center"
+                                alignItems="center"
+                                sx={[overlaySx, deleteImgHoverSx]}
+                              >
+                                {disabled ? (
+                                  <OpenIcon />
+                                ) : (
+                                  <DeleteIcon color="error" />
+                                )}
+                              </Grid>
+                            </ButtonBase>
+                          </Tooltip>
+                        ) : (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              ...provided.draggableProps.style,
+                            }}
+                          >
+                            {value.length > 1 && (
+                              <div
+                                {...provided.dragHandleProps}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <DragIndicatorIcon />
+                              </div>
+                            )}
+                            <Box sx={imgSx} className="img">
+                              <Thumbnail
+                                imageUrl={image.downloadURL}
+                                size="200x200"
+                                objectFit="contain"
+                                sx={thumbnailSx}
+                              />
+                              <Grid
+                                container
+                                justifyContent="center"
+                                alignItems="center"
+                                sx={[overlaySx, deleteImgHoverSx]}
+                              >
+                                <Tooltip title="Delete…">
+                                  <IconButton
+                                    onClick={() =>
+                                      confirm({
+                                        title: "Delete image?",
+                                        body: "This image cannot be recovered after",
+                                        confirm: "Delete",
+                                        confirmColor: "error",
+                                        handleConfirm: () =>
+                                          handleDelete(image),
+                                      })
+                                    }
+                                  >
+                                    <DeleteIcon color="error" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Open">
+                                  <IconButton
+                                    onClick={() =>
+                                      window.open(image.downloadURL, "_blank")
+                                    }
+                                  >
+                                    <OpenIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </Grid>
+                            </Box>
+                          </div>
+                        )}
+                      </Grid>
+                    )}
+                  </Draggable>
+                ))}
+              {localImages &&
+                localImages.map((image) => (
+                  <Grid item key={image.name}>
+                    <ButtonBase
+                      sx={imgSx}
+                      style={{
+                        backgroundImage: `url("${image.localURL}")`,
+                      }}
+                      className="img"
+                    >
+                      {uploaderState[image.name] && (
+                        <Grid
+                          container
+                          justifyContent="center"
+                          alignItems="center"
+                          sx={overlaySx}
+                        >
+                          <CircularProgressOptical
+                            color="inherit"
+                            size={48}
+                            variant={
+                              uploaderState[image.name].progress === 0
+                                ? "indeterminate"
+                                : "determinate"
+                            }
+                            value={uploaderState[image.name].progress}
+                          />
+                        </Grid>
+                      )}
+                    </ButtonBase>
+                  </Grid>
+                ))}
+              {provided.placeholder}
+            </Grid>
+          )}
+        </Droppable>
+      </DragDropContext>
     </>
   );
 }

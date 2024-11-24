@@ -1,14 +1,23 @@
 import { TableSettings } from "@src/types/table";
 import { generateId } from "@src/utils/table";
-import { typeform, basic, sendgrid, webform } from "./Schemas";
+import {
+  typeform,
+  basic,
+  sendgrid,
+  webform,
+  stripe,
+  firebaseAuth,
+} from "./Schemas";
+
 export const webhookTypes = [
   "basic",
   "typeform",
   "sendgrid",
   "webform",
+  "firebaseAuth",
   //"shopify",
   //"twitter",
-  //"stripe",
+  "stripe",
 ] as const;
 
 const requestType = [
@@ -25,17 +34,49 @@ const requestType = [
 
 export const parserExtraLibs = [
   requestType,
-  `type Parser = (args:{req:WebHookRequest,db: FirebaseFirestore.Firestore,ref: FirebaseFirestore.CollectionReference,res:{
-    send:(v:any)=>void
-    sendStatus:(status:number)=>void
-  }}) => Promise<any>;`,
+  `type Parser = (
+    args: {
+      req: WebHookRequest;
+      db: FirebaseFirestore.Firestore;
+      ref: FirebaseFirestore.CollectionReference;
+      res: {
+        send: (v:any)=>void;
+        sendStatus: (status:number)=>void
+      };
+      user: {
+        uid: string;
+        email: string;
+        email_verified: boolean;
+        exp: number;
+        iat: number;
+        iss: string;
+        aud: string;
+        auth_time: number;
+        phone_number: string;
+        picture: string;
+      } | undefined;
+      logging: RowyLogging;
+      auth:firebaseauth.BaseAuth;
+      storage:firebasestorage.Storage;
+    }
+  ) => Promise<any>;`,
 ];
 export const conditionExtraLibs = [
   requestType,
-  `type Condition = (args:{req:WebHookRequest,db: FirebaseFirestore.Firestore,ref: FirebaseFirestore.CollectionReference,res:{
-    send:(v:any)=>void
-    sendStatus:(status:number)=>void
-  }}) => Promise<any>;`,
+  `type Condition = (
+     args: {
+      req:WebHookRequest,
+      db: FirebaseFirestore.Firestore,
+      ref: FirebaseFirestore.CollectionReference,
+      res: {
+        send: (v:any)=>void
+        sendStatus: (status:number)=>void
+      };
+      logging: RowyLogging;
+      auth:firebaseauth.BaseAuth;
+      storage:firebasestorage.Storage;
+    }
+  ) => Promise<any>;`,
 ];
 
 const additionalVariables = [
@@ -50,12 +91,13 @@ export type WebhookType = typeof webhookTypes[number];
 export const webhookNames: Record<WebhookType, string> = {
   sendgrid: "SendGrid",
   typeform: "Typeform",
+  firebaseAuth: "Firebase Auth",
   //github:"GitHub",
   // shopify: "Shopify",
   // twitter: "Twitter",
-  // stripe: "Stripe",
+  stripe: "Stripe",
   basic: "Basic",
-  webform: "Web form",
+  webform: "Web Form",
 };
 
 export interface IWebhookEditor {
@@ -82,6 +124,8 @@ export const webhookSchemas = {
   typeform,
   sendgrid,
   webform,
+  stripe,
+  firebaseAuth,
 };
 
 export function emptyWebhookObject(
@@ -91,7 +135,7 @@ export function emptyWebhookObject(
 ): IWebhook {
   return {
     name: `${type} webhook`,
-    active: false,
+    active: true,
     endpoint: generateId(),
     type,
     parser: webhookSchemas[type].parser?.template(table),

@@ -1,13 +1,11 @@
 import { lazy } from "react";
 import { IFieldConfig, FieldType } from "@src/components/fields/types";
-import withBasicCell from "@src/components/fields/_withTableCell/withBasicCell";
+import withRenderTableCell from "@src/components/Table/TableCell/withRenderTableCell";
 
 import GeoPointIcon from "@mui/icons-material/PinDropOutlined";
-import withSideDrawerEditor from "@src/components/Table/editors/withSideDrawerEditor";
+import DisplayCell from "./DisplayCell";
+import BasicContextMenuActions from "@src/components/Table/ContextMenu/BasicCellContextMenuActions";
 
-const TableCell = lazy(
-  () => import("./TableCell" /* webpackChunkName: "TableCell-GeoPoint" */)
-);
 const SideDrawerField = lazy(
   () =>
     import(
@@ -17,14 +15,17 @@ const SideDrawerField = lazy(
 
 export const config: IFieldConfig = {
   type: FieldType.geoPoint,
-  name: "GeoPoint (Alpha)",
+  name: "GeoPoint",
   group: "Numeric",
   dataType: "{latitude:number; longitude:number}",
   initialValue: {},
   icon: <GeoPointIcon />,
   description: "Geo point is represented as latitude/longitude pair.",
-  TableCell: withBasicCell(TableCell),
-  TableEditor: withSideDrawerEditor(TableCell),
+  TableCell: withRenderTableCell(DisplayCell, SideDrawerField, "popover", {
+    popoverProps: { PaperProps: { sx: { p: 1, pt: 0 } } },
+  }),
   SideDrawerField,
+  contextMenuActions: BasicContextMenuActions,
+  keywords: ["location", "latitude", "longitude", "point"]
 };
 export default config;

@@ -9,26 +9,30 @@ import SettingsSkeleton from "@src/components/Settings/SettingsSkeleton";
 import SettingsSection from "@src/components/Settings/SettingsSection";
 import Account from "@src/components/Settings/UserSettings/Account";
 import Theme from "@src/components/Settings/UserSettings/Theme";
+import TableSettings from "@src/components/Settings/UserSettings/TableSettings";
 import Personalization from "@src/components/Settings/UserSettings/Personalization";
 
 import {
-  globalScope,
+  projectScope,
   currentUserAtom,
   userSettingsAtom,
   updateUserSettingsAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
+import { useScrollToHash } from "@src/hooks/useScrollToHash";
+import { UserSettings } from "@src/types/settings";
 
 export interface IUserSettingsChildProps {
-  settings: Record<string, any>;
-  updateSettings: (data: Record<string, any>) => void;
+  settings: UserSettings;
+  updateSettings: (data: Partial<UserSettings>) => void;
 }
 
 export default function UserSettingsPage() {
-  const [currentUser] = useAtom(currentUserAtom, globalScope);
-  const [userSettings] = useAtom(userSettingsAtom, globalScope);
+  const [currentUser] = useAtom(currentUserAtom, projectScope);
+  const [userSettings] = useAtom(userSettingsAtom, projectScope);
   const { enqueueSnackbar } = useSnackbar();
+  useScrollToHash();
 
-  const [_updateUserSettings] = useAtom(updateUserSettingsAtom, globalScope);
+  const [_updateUserSettings] = useAtom(updateUserSettingsAtom, projectScope);
   const updateSettings = useDebouncedCallback((data) => {
     if (_updateUserSettings) {
       _updateUserSettings(data).then(() => enqueueSnackbar("Saved"));
@@ -54,6 +58,7 @@ export default function UserSettingsPage() {
   const sections = [
     { title: "Account", Component: Account, props: childProps },
     { title: "Theme", Component: Theme, props: childProps },
+    { title: "Table Settings", Component: TableSettings, props: childProps },
     { title: "Personalization", Component: Personalization, props: childProps },
   ];
 

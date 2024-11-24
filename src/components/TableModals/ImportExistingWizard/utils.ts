@@ -18,14 +18,21 @@ export const SELECTABLE_TYPES = [
   FieldType.url,
   FieldType.rating,
 
+  FieldType.image,
+  FieldType.file,
+
   FieldType.singleSelect,
   FieldType.multiSelect,
 
   FieldType.json,
   FieldType.code,
 
+  FieldType.geoPoint,
+
   FieldType.color,
   FieldType.slider,
+
+  FieldType.reference,
 ];
 
 export const REGEX_EMAIL =
@@ -37,15 +44,28 @@ export const REGEX_URL =
 export const REGEX_HTML = /<\/?[a-z][\s\S]*>/;
 
 const inferTypeFromValue = (value: any) => {
+  // by default the type of value is string, so trying to convert it to JSON/Object.
+  try {
+    value = JSON.parse(value);
+  } catch (e) {}
   if (!value || typeof value === "function") return;
 
   if (Array.isArray(value) && typeof value[0] === "string")
     return FieldType.multiSelect;
   if (typeof value === "boolean") return FieldType.checkbox;
   if (isDate(value)) return FieldType.dateTime;
+  // trying to convert the value to date
+  if (typeof value !== "number" && +new Date(value)) {
+    // date and time are separated by a blank space, checking if time present.
+    if (value.split(" ").length > 1) {
+      return FieldType.dateTime;
+    }
+    return FieldType.date;
+  }
 
   if (typeof value === "object") {
     if ("hex" in value && "rgb" in value) return FieldType.color;
+    if ("latitude" in value && "longitude" in value) return FieldType.geoPoint;
     if ("toDate" in value) return FieldType.dateTime;
     return FieldType.json;
   }
@@ -57,8 +77,8 @@ const inferTypeFromValue = (value: any) => {
 
   if (typeof value === "string") {
     if (REGEX_EMAIL.test(value)) return FieldType.email;
-    if (REGEX_PHONE.test(value)) return FieldType.phone;
     if (REGEX_URL.test(value)) return FieldType.url;
+    if (REGEX_PHONE.test(value)) return FieldType.phone;
     if (REGEX_HTML.test(value)) return FieldType.richText;
     if (value.length >= 50) return FieldType.longText;
     return FieldType.shortText;
@@ -70,6 +90,7 @@ const inferTypeFromValue = (value: any) => {
 export const suggestType = (data: { [key: string]: any }[], field: string) => {
   const results: Record<string, number> = {};
 
+  // console.log(data)
   data.forEach((row) => {
     const result = inferTypeFromValue(row[field]);
     if (!result) return;

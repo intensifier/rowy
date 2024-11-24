@@ -1,5 +1,5 @@
 import { lazy, Suspense, createElement, useState } from "react";
-import { useAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -11,13 +11,13 @@ import CodeEditorHelper from "@src/components/CodeEditor/CodeEditorHelper";
 import { FieldType } from "@src/constants/fields";
 import { WIKI_LINKS } from "@src/constants/externalLinks";
 
-/* eslint-disable import/no-webpack-loader-syntax */
-import defaultValueDefs from "!!raw-loader!./defaultValue.d.ts";
+import defaultValueDefs from "./defaultValue.d.ts?raw";
 import {
-  globalScope,
+  projectScope,
   compatibleRowyRunVersionAtom,
   projectSettingsAtom,
-} from "@src/atoms/globalScope";
+  rowyRunModalAtom,
+} from "@src/atoms/projectScope";
 import { ColumnConfig } from "@src/types/table";
 
 const CodeEditorComponent = lazy(
@@ -40,7 +40,7 @@ interface ICodeEditorProps {
 function CodeEditor({ type, column, handleChange }: ICodeEditorProps) {
   const [compatibleRowyRunVersion] = useAtom(
     compatibleRowyRunVersionAtom,
-    globalScope
+    projectScope
   );
 
   const functionBodyOnly = compatibleRowyRunVersion!({ maxVersion: "1.3.10" });
@@ -52,18 +52,25 @@ function CodeEditor({ type, column, handleChange }: ICodeEditorProps) {
   } else if (column.config?.defaultValue?.dynamicValueFn) {
     dynamicValueFn = column.config?.defaultValue?.dynamicValueFn;
   } else if (column.config?.defaultValue?.script) {
-    dynamicValueFn = `const dynamicValueFn : DefaultValue = async ({row,ref,db,storage,auth})=>{
-    ${column.config?.defaultValue.script}
-    }`;
+    dynamicValueFn = `const dynamicValueFn: DefaultValue = async ({row,ref,db,storage,auth,logging})=>{
+  logging.log("dynamicValueFn started")
+  
+  ${column.config?.defaultValue.script}
+}`;
   } else {
-    dynamicValueFn = `const dynamicValueFn : DefaultValue = async ({row,ref,db,storage,auth})=>{
-      // Write your default value code here
-      // for example:
-      // generate random hex color
-      // const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
-      // return color;
-      // checkout the documentation for more info: https://docs.rowy.io/how-to/default-values#dynamic
-    }`;
+    dynamicValueFn = `// Import any NPM package needed
+// import _ from "lodash";
+
+const defaultValue: DefaultValue = async ({ row, ref, db, storage, auth, logging }) => {
+  logging.log("dynamicValueFn started");
+
+  // Example: generate random hex color
+  // const color = "#" + Math.floor(Math.random() * 16777215).toString(16);
+  // return color;
+};
+
+export default defaultValue;
+`;
   }
 
   return (
@@ -92,7 +99,8 @@ export default function DefaultValueInput({
   handleChange,
   column,
 }: IDefaultValueInputProps) {
-  const [projectSettings] = useAtom(projectSettingsAtom, globalScope);
+  const [projectSettings] = useAtom(projectSettingsAtom, projectScope);
+  const openRowyRunModal = useSetAtom(rowyRunModalAtom, projectScope);
 
   const _type =
     column.type !== FieldType.derivative
@@ -152,9 +160,23 @@ export default function DefaultValueInput({
                 "Dynamic"
               ) : (
                 <>
-                  Dynamic —{" "}
+                  Dynamic{" "}
                   <Typography color="error" variant="inherit" component="span">
-                    Requires Rowy Run setup
+                    Requires
+                    <span
+                      style={{
+                        marginLeft: "3px",
+                        cursor: "pointer",
+                        pointerEvents: "all",
+                        textDecoration: "underline",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openRowyRunModal({ feature: "Dynamic Default Value" });
+                      }}
+                    >
+                      Cloud Function
+                    </span>
                   </Typography>
                 </>
               )
@@ -204,7 +226,19 @@ export default function DefaultValueInput({
 
       {column.config?.defaultValue?.type === "dynamic" && (
         <>
-          <CodeEditorHelper docLink={WIKI_LINKS.howToDefaultValues} />
+          <CodeEditorHelper
+            docLink={WIKI_LINKS.howToDefaultValues}
+            additionalVariables={[
+              {
+                key: "row",
+                description: `row has the value of doc.data() it has type definitions using this table's schema, but you can access any field in the document.`,
+              },
+              {
+                key: "ref",
+                description: `reference object that represents the reference to the current row in firestore db (ie: doc.ref).`,
+              },
+            ]}
+          />
           <Suspense fallback={<FieldSkeleton height={100} />}>
             <CodeEditor
               column={column}

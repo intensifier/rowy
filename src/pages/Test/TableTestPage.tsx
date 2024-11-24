@@ -18,9 +18,10 @@ import TableToolbarSkeleton from "@src/components/TableToolbar/TableToolbarSkele
 import TableSkeleton from "@src/components/Table/TableSkeleton";
 
 import { firebaseDbAtom } from "@src/sources/ProjectSourceFirebase";
-import { currentUserAtom, globalScope } from "@src/atoms/globalScope";
+import { currentUserAtom, projectScope } from "@src/atoms/projectScope";
 import { doc, setDoc, updateDoc } from "firebase/firestore";
 import { TABLE_SCHEMAS } from "@src/config/dbPaths";
+import { generateId } from "@src/utils/table";
 
 function TableTestPage() {
   const [tableId] = useAtom(tableIdAtom, tableScope);
@@ -35,7 +36,7 @@ function TableTestPage() {
 
   console.log(tableId, tableSettings, tableSchema);
 
-  const [firebaseDb] = useAtom(firebaseDbAtom, globalScope);
+  const [firebaseDb] = useAtom(firebaseDbAtom, projectScope);
 
   return (
     <div>
@@ -78,7 +79,14 @@ function TableTestPage() {
 
       <button
         onClick={() =>
-          setTableFilters([{ key: "signedUp", operator: "==", value: true }])
+          setTableFilters([
+            {
+              key: "signedUp",
+              operator: "==",
+              value: true,
+              id: generateId(),
+            },
+          ])
         }
       >
         Set table filters
@@ -105,7 +113,7 @@ function TableTestPage() {
 
 export default function ProvidedTableTestPage() {
   const { id } = useParams();
-  const [currentUser] = useAtom(currentUserAtom, globalScope);
+  const [currentUser] = useAtom(currentUserAtom, projectScope);
 
   return (
     <Suspense

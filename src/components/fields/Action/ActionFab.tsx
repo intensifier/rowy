@@ -4,7 +4,7 @@ import { get } from "lodash-es";
 import { useAtom, useSetAtom } from "jotai";
 import { httpsCallable } from "firebase/functions";
 
-import { Fab, FabProps } from "@mui/material";
+import { Button, Fab, FabProps, Link } from "@mui/material";
 import RunIcon from "@mui/icons-material/PlayArrow";
 import RedoIcon from "@mui/icons-material/Refresh";
 import UndoIcon from "@mui/icons-material/Undo";
@@ -12,10 +12,10 @@ import CircularProgressOptical from "@src/components/CircularProgressOptical";
 
 import { firebaseFunctionsAtom } from "@src/sources/ProjectSourceFirebase";
 import {
-  globalScope,
+  projectScope,
   confirmDialogAtom,
   rowyRunAtom,
-} from "@src/atoms/globalScope";
+} from "@src/atoms/projectScope";
 import { tableScope, tableSettingsAtom } from "@src/atoms/tableScope";
 import { useActionParams } from "./FormDialog/Context";
 import { runRoutes } from "@src/constants/runRoutes";
@@ -28,6 +28,16 @@ const replacer = (data: any) => (m: string, key: string) => {
 };
 
 const getStateIcon = (actionState: "undo" | "redo" | string, config: any) => {
+  if (!get(config, "customIcons.enabled", false)) {
+    switch (actionState) {
+      case "undo":
+        return <UndoIcon />;
+      case "redo":
+        return <RedoIcon />;
+      default:
+        return <RunIcon />;
+    }
+  }
   switch (actionState) {
     case "undo":
       return get(config, "customIcons.undo") || <UndoIcon />;
@@ -41,7 +51,6 @@ const getStateIcon = (actionState: "undo" | "redo" | string, config: any) => {
 export interface IActionFabProps extends Partial<FabProps> {
   row: any;
   column: any;
-  onSubmit: (value: any) => void;
   value: any;
   disabled: boolean;
 }
@@ -49,15 +58,14 @@ export interface IActionFabProps extends Partial<FabProps> {
 export default function ActionFab({
   row,
   column,
-  onSubmit,
   value,
   disabled,
   ...props
 }: IActionFabProps) {
-  const confirm = useSetAtom(confirmDialogAtom, globalScope);
-  const [rowyRun] = useAtom(rowyRunAtom, globalScope);
+  const confirm = useSetAtom(confirmDialogAtom, projectScope);
+  const [rowyRun] = useAtom(rowyRunAtom, projectScope);
   const [tableSettings] = useAtom(tableSettingsAtom, tableScope);
-  const [firebaseFunctions] = useAtom(firebaseFunctionsAtom, globalScope);
+  const [firebaseFunctions] = useAtom(firebaseFunctionsAtom, projectScope);
 
   const { enqueueSnackbar } = useSnackbar();
   const { requestParams } = useActionParams();
@@ -110,11 +118,32 @@ export default function ActionFab({
       } else {
         result = await handleCallableAction(data);
       }
-      const { message, success } = result ?? {};
+      const { message, success, link } = result ?? {};
       enqueueSnackbar(
         typeof message === "string" ? message : JSON.stringify(message),
         {
           variant: success ? "success" : "error",
+          action: link ? (
+            typeof link === "string" ? (
+              <Button
+                variant="outlined"
+                href={link}
+                component={Link}
+                target="_blank"
+              >
+                Link
+              </Button>
+            ) : (
+              <Button
+                href={link.url}
+                component={Link}
+                variant="outlined"
+                target="_blank"
+              >
+                {link.label}
+              </Button>
+            )
+          ) : undefined,
         }
       );
     } catch (e) {
@@ -175,6 +204,7 @@ export default function ActionFab({
       }
       size="small"
       sx={{
+        zIndex: 1,
         "&:not(.MuiFab-primary):not(.MuiFab-secondary):not(.Mui-disabled)": {
           bgcolor: (theme) =>
             theme.palette.mode === "dark"

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import useMemoValue from "use-memo-value";
 import { useAtom, PrimitiveAtom, useSetAtom, SetStateAction } from "jotai";
-import { Scope } from "jotai/core/atom";
 import { set } from "lodash-es";
 import {
   Firestore,
@@ -17,16 +16,21 @@ import {
   setDoc,
   doc,
   deleteDoc,
+  updateDoc,
   deleteField,
   CollectionReference,
   Query,
-  QueryConstraint,
   WhereFilterOp,
   documentId,
+  getCountFromServer,
+  DocumentData,
+  or,
+  QueryFieldFilterConstraint,
+  Timestamp,
 } from "firebase/firestore";
 import { useErrorHandler } from "react-error-boundary";
 
-import { globalScope } from "@src/atoms/globalScope";
+import { projectScope } from "@src/atoms/projectScope";
 import {
   UpdateCollectionDocFunction,
   DeleteCollectionDocFunction,
@@ -63,11 +67,15 @@ interface IUseFirestoreCollectionWithAtomOptions<T> {
   deleteDocAtom?: PrimitiveAtom<DeleteCollectionDocFunction | undefined>;
   /** Update this atom when we’re loading the next page, and if there is a next page available. Uses same scope as `dataScope`. */
   nextPageAtom?: PrimitiveAtom<NextPageState>;
+  /** Set this atom's value to the number of docs in the collection on each new snapshot */
+  serverDocCountAtom?: PrimitiveAtom<number | undefined>;
+
+  joinOperator?: "AND" | "OR";
 }
 
 /**
  * Attaches a listener for a Firestore collection and unsubscribes on unmount.
- * Gets the Firestore instance initiated in globalScope.
+ * Gets the Firestore instance initiated in projectScope.
  * Updates an atom and Suspends that atom until the first snapshot is received.
  *
  * @param dataAtom - Atom to store data in
@@ -75,9 +83,11 @@ interface IUseFirestoreCollectionWithAtomOptions<T> {
  * @param path - Collection path. If falsy, the listener isn’t created at all.
  * @param options - {@link IUseFirestoreCollectionWithAtomOptions}
  */
-export function useFirestoreCollectionWithAtom<T = TableRow>(
+export function useFirestoreCollectionWithAtom<
+  T extends DocumentData = TableRow
+>(
   dataAtom: PrimitiveAtom<T[]>,
-  dataScope: Scope | undefined,
+  dataScope: Parameters<typeof useAtom>[1] | undefined,
   path: string | undefined,
   options?: IUseFirestoreCollectionWithAtomOptions<T>
 ) {
@@ -94,9 +104,11 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
     updateDocAtom,
     deleteDocAtom,
     nextPageAtom,
+    serverDocCountAtom,
+    joinOperator,
   } = options || {};
 
-  const [firebaseDb] = useAtom(firebaseDbAtom, globalScope);
+  const [firebaseDb] = useAtom(firebaseDbAtom, projectScope);
   const setDataAtom = useSetAtom(dataAtom, dataScope);
   const handleError = useErrorHandler();
 
@@ -117,9 +129,13 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
     void
   >(nextPageAtom || (dataAtom as any), dataScope);
 
+  const setServerDocCountAtom = useSetAtom(
+    serverDocCountAtom || (dataAtom as any),
+    dataScope
+  );
+
   // Store if we’re at the last page to prevent a new query from being created
   const [isLastPage, setIsLastPage] = useState(false);
-
   // Create the query and memoize using Firestore’s queryEqual
   const memoizedQuery = useMemoValue(
     getQuery<T>(
@@ -130,6 +146,7 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
       page,
       pageSize,
       filters,
+      joinOperator,
       sorts,
       onError
     ),
@@ -141,6 +158,9 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
         JSON.stringify(prev?.firestoreFilters)
       )
         return false;
+
+      // If joinOperator is not equal, update the query
+      if (next?.joinOperator !== prev?.joinOperator) return false;
 
       // If sorts are not equal, update the query
       // Overrides isLastPage check
@@ -191,6 +211,12 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
               available: docs.length >= memoizedQuery.limit,
             }));
           }
+          // on each new snapshot, use the query to get and set the document count from the server
+          if (serverDocCountAtom) {
+            getCountFromServer(memoizedQuery.unlimitedQuery).then((value) => {
+              setServerDocCountAtom(value.data().count);
+            });
+          }
         } catch (error) {
           if (onError) onError(error as FirestoreError);
           else handleError(error);
@@ -202,7 +228,7 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
           setDataAtom([]);
           suspended = false;
         }
-        if (nextPageAtom) setNextPageAtom({ loading: false, available: true });
+        if (nextPageAtom) setNextPageAtom({ loading: false, available: false });
         if (onError) onError(error);
         else handleError(error);
       }
@@ -222,6 +248,8 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
     handleError,
     nextPageAtom,
     setNextPageAtom,
+    serverDocCountAtom,
+    setServerDocCountAtom,
   ]);
 
   // Create variable for validity of query to pass to useEffect dependencies
@@ -237,17 +265,37 @@ export function useFirestoreCollectionWithAtom<T = TableRow>(
     // set the atom’s value to a function that updates a doc in the collection
     if (updateDocAtom) {
       setUpdateDocAtom(
-        () => (path: string, update: T, deleteFields?: string[]) => {
-          const updateToDb = { ...update };
+        () =>
+          async (
+            path: string,
+            update: T,
+            deleteFields?: string[],
+            options?: {
+              useSet?: boolean;
+            }
+          ) => {
+            const updateToDb = { ...update };
 
-          if (Array.isArray(deleteFields)) {
-            for (const field of deleteFields) {
-              set(updateToDb as any, field, deleteField());
+            if (Array.isArray(deleteFields)) {
+              for (const field of deleteFields) {
+                set(updateToDb as any, field, deleteField());
+              }
+            }
+
+            if (options?.useSet) {
+              return await setDoc(doc(firebaseDb, path), updateToDb, {
+                merge: true,
+              });
+            }
+
+            try {
+              return await updateDoc(doc(firebaseDb, path), updateToDb);
+            } catch (e) {
+              return await setDoc(doc(firebaseDb, path), updateToDb, {
+                merge: true,
+              });
             }
           }
-
-          return setDoc(doc(firebaseDb, path), updateToDb, { merge: true });
-        }
       );
     }
 
@@ -291,6 +339,7 @@ const getQuery = <T>(
   page: number,
   pageSize: number,
   filters: IUseFirestoreCollectionWithAtomOptions<T>["filters"],
+  joinOperator: "AND" | "OR" | undefined,
   sorts: IUseFirestoreCollectionWithAtomOptions<T>["sorts"],
   onError: IUseFirestoreCollectionWithAtomOptions<T>["onError"]
 ) => {
@@ -314,25 +363,63 @@ const getQuery = <T>(
     }
 
     if (!collectionRef) return null;
-
     const limit = (page + 1) * pageSize;
     const firestoreFilters = tableFiltersToFirestoreFilters(filters || []);
 
-    return {
-      query: query<T>(
-        collectionRef,
-        queryLimit((page + 1) * pageSize),
-        ...firestoreFilters,
-        ...(sorts?.map((order) => orderBy(order.key, order.direction)) || [])
-      ),
-      page,
-      limit,
-      firestoreFilters,
-      sorts,
-    };
+    return joinOperator === "OR"
+      ? {
+          query: query<T>(
+            collectionRef,
+            or(...firestoreFilters),
+            queryLimit(limit),
+            ...(sorts?.map((order) => orderBy(order.key, order.direction)) ||
+              [])
+          ),
+          page,
+          limit,
+          firestoreFilters,
+          sorts,
+          unlimitedQuery: query<T>(collectionRef, ...firestoreFilters),
+          joinOperator,
+        }
+      : {
+          query: query<T>(
+            collectionRef,
+            queryLimit(limit),
+            ...firestoreFilters,
+            ...(sorts?.map((order) => orderBy(order.key, order.direction)) ||
+              [])
+          ),
+          page,
+          limit,
+          firestoreFilters,
+          sorts,
+          unlimitedQuery: query<T>(collectionRef, ...firestoreFilters),
+          joinOperator,
+        };
   } catch (e) {
     if (onError) onError(e as FirestoreError);
     return null;
+  }
+};
+
+/**
+ * Parse datetime to Date object
+ * \{ nanoseconds: number; seconds: number \} is a Timestamp object without toDate() method, we need to calculate it manually
+ * */
+const parseDateFilterValue = (
+  date: Date | Timestamp | { nanoseconds: number; seconds: number }
+) => {
+  if (date instanceof Date) {
+    return date;
+  } else if ("toDate" in date) {
+    return date.toDate();
+  } else if (date.seconds) {
+    return new Date(date.seconds * 1000 + date.nanoseconds / 1_000_000);
+  } else if (date instanceof Timestamp) {
+    return date.toDate();
+  } else {
+    throw new Error(`Invalid date ${date}`);
   }
 };
 
@@ -343,13 +430,12 @@ const getQuery = <T>(
  * @returns Array of Firestore query `where` constraints
  */
 export const tableFiltersToFirestoreFilters = (filters: TableFilter[]) => {
-  const firestoreFilters: QueryConstraint[] = [];
+  const firestoreFilters: QueryFieldFilterConstraint[] = [];
 
   for (const filter of filters) {
     if (filter.operator.startsWith("date-")) {
       if (!filter.value) continue;
-      const filterDate =
-        "toDate" in filter.value ? filter.value.toDate() : filter.value;
+      const filterDate = parseDateFilterValue(filter.value);
       const [startDate, endDate] = getDateRange(filterDate);
 
       if (filter.operator === "date-equal") {
@@ -367,8 +453,7 @@ export const tableFiltersToFirestoreFilters = (filters: TableFilter[]) => {
       continue;
     } else if (filter.operator === "time-minute-equal") {
       if (!filter.value) continue;
-      const filterDate =
-        "toDate" in filter.value ? filter.value.toDate() : filter.value;
+      const filterDate = parseDateFilterValue(filter.value);
       const [startDate, endDate] = getTimeRange(filterDate);
 
       firestoreFilters.push(where(filter.key, ">=", startDate));
@@ -377,12 +462,34 @@ export const tableFiltersToFirestoreFilters = (filters: TableFilter[]) => {
     } else if (filter.operator === "id-equal") {
       firestoreFilters.push(where(documentId(), "==", filter.value));
       continue;
+    } else if (filter.operator === "color-equal") {
+      firestoreFilters.push(
+        where(filter.key.concat(".hex"), "==", filter.value.hex.toString())
+      );
+      continue;
+    } else if (filter.operator === "color-not-equal") {
+      firestoreFilters.push(
+        where(filter.key.concat(".hex"), "!=", filter.value.hex.toString())
+      );
+      continue;
+    } else if (filter.operator === "is-empty") {
+      firestoreFilters.push(where(filter.key, "==", ""));
+      continue;
+    } else if (filter.operator === "is-not-empty") {
+      firestoreFilters.push(where(filter.key, "!=", ""));
+      continue;
+    } else if (filter.operator === "array-contains") {
+      if (!filter.value || !filter.value.length) continue;
+      // make the value as a singular string
+      firestoreFilters.push(
+        where(filter.key, filter.operator as WhereFilterOp, filter.value[0])
+      );
+      continue;
     }
 
     firestoreFilters.push(
       where(filter.key, filter.operator as WhereFilterOp, filter.value)
     );
   }
-
   return firestoreFilters;
 };
